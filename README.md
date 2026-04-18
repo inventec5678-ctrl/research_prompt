@@ -160,3 +160,28 @@ research_prompt/
 **框架改動**：v1.1 強制規定每次測試後都必須儲存
 
 **結論**：禁止跳過儲存，歷史紀錄是未來決策的基礎。
+
+### v3.1 — 2026-04-18 16:01
+**新增 Monte Carlo 穩定性測試**
+
+#### 新增檔案
+- `monte_carlo_test.py`：Block Bootstrap 評估策略穩定性
+
+#### Prompt 變更
+```
+# 步驟 5：運行 Monte Carlo 穩定性測試
+from monte_carlo_test import MonteCarloTester
+
+tester = MonteCarloTester(df, generate_signals, params)
+mc_result = tester.run(n_bootstrap=500, block_size=10)
+```
+
+#### Monte Carlo 通過標準
+| 指標 | 標準 |
+|------|------|
+| Sharpe 5th percentile | > 0 |
+| Sharpe 變異係數 | < 2 |
+| 95% VaR DD | < 50% |
+
+#### 原因
+只靠基本回測通過不夠，必須確認策略在不同市場環境下都穩定。
