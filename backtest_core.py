@@ -12,9 +12,9 @@ import pandas as pd
 df = pd.read_parquet("data/btcusdt_15m.parquet")
 
 params = {
-    'stop_loss_pct': 0.02,        # 2% 止損
-    'take_profit_pct': 0.04,      # 4% 止盈
-    'max_holding_bars': 20        # 最大持倉K線數
+    'stop_loss_pct': 0.02,        # 2% 止損（必要）
+    'take_profit_pct': 0.04,      # 4% 止盈（必要）
+    'max_holding_bars': None     # 最大持倉K線數（可選，None=不限制）
 }
 
 engine = BacktestEngine(df, params)
@@ -63,9 +63,9 @@ class BacktestEngine:
     參數：
         data: DataFrame（含 open, high, low, close, volume）
         params: 字典
-            - stop_loss_pct: 止損百分比
-            - take_profit_pct: 止盈百分比
-            - max_holding_bars: 最大持倉K線數
+            - stop_loss_pct: 止損百分比（必要）
+            - take_profit_pct: 止盈百分比（必要）
+            - max_holding_bars: 最大持倉K線數（可選，None=不限制）
     """
     
     def __init__(self, data: pd.DataFrame, params: dict):
@@ -78,7 +78,8 @@ class BacktestEngine:
         
         self.sl_pct = params.get('stop_loss_pct', 0.02)
         self.tp_pct = params.get('take_profit_pct', 0.04)
-        self.max_bars = params.get('max_holding_bars', 20)
+        # max_holding_bars 預設 None = 不限時間（由 agent 控制）
+        self.max_bars = params.get('max_holding_bars', None)
     
     def run(self, signal_func: Callable) -> dict:
         """
@@ -149,8 +150,8 @@ class BacktestEngine:
                 elif pnl_pct >= self.tp_pct:
                     exit_reason = 'TAKE_PROFIT'
                     final_pnl = self.tp_pct - COST
-                # 檢查超時
-                elif holding_bars >= self.max_bars:
+                # 檢查超時（如果 max_bars 有設定）
+                elif self.max_bars is not None and holding_bars >= self.max_bars:
                     exit_reason = 'TIMEOUT'
                     final_pnl = final_pnl - COST
                 
@@ -298,7 +299,7 @@ if __name__ == "__main__":
     params = {
         'stop_loss_pct': 0.02,
         'take_profit_pct': 0.04,
-        'max_holding_bars': 20
+        'max_holding_bars': None  # 不限制，讓策略自己決定何時出場
     }
     
     print("\n運行回測...")
