@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-backtest_core.py - 標準化回測框架
+backtest_core.py - 標準化回測框架 v3
 
 用於 BTC 15分K 交易策略回測
 
@@ -12,7 +12,6 @@ import pandas as pd
 df = pd.read_parquet("data/btcusdt_15m.parquet")
 
 params = {
-    'entry_condition': 'always',  # 'always' 或 'bar_by_bar'
     'stop_loss_pct': 0.02,        # 2% 止損
     'take_profit_pct': 0.04,      # 4% 止盈
     'max_holding_bars': 20        # 最大持倉K線數
@@ -64,7 +63,6 @@ class BacktestEngine:
     參數：
         data: DataFrame（含 open, high, low, close, volume）
         params: 字典
-            - entry_condition: 'always' | 'bar_by_bar'
             - stop_loss_pct: 止損百分比
             - take_profit_pct: 止盈百分比
             - max_holding_bars: 最大持倉K線數
@@ -78,7 +76,6 @@ class BacktestEngine:
         self.lows = data['low'].values.astype(float)
         self.n = len(self.closes)
         
-        self.entry_condition = params.get('entry_condition', 'always')
         self.sl_pct = params.get('stop_loss_pct', 0.02)
         self.tp_pct = params.get('take_profit_pct', 0.04)
         self.max_bars = params.get('max_holding_bars', 20)
@@ -113,7 +110,9 @@ class BacktestEngine:
                     position = {
                         'direction': signals[i],
                         'entry_price': entry_price,
-                        'entry_bar': i + 1
+                        'entry_bar': i + 1,
+                        'highest': entry_price,
+                        'lowest': entry_price
                     }
                     entry_bar = i + 1
             else:
@@ -121,7 +120,17 @@ class BacktestEngine:
                 direction = position['direction']
                 entry_price = position['entry_price']
                 current_price = self.closes[i]
+                current_high = self.highs[i]
+                current_low = self.lows[i]
                 holding_bars = i - entry_bar
+                
+                # 更新最高/最低價（用於止損止盈計算）
+                if direction > 0:
+                    if current_high > position['highest']:
+                        position['highest'] = current_high
+                else:
+                    if current_low < position['lowest']:
+                        position['lowest'] = current_low
                 
                 # 計算未實現損益
                 if direction > 0:
@@ -249,14 +258,20 @@ class BacktestEngine:
 # ============ 測試 ============
 
 if __name__ == "__main__":
-    # 測試框架
-    df = pd.read_parquet("/Users/changrunlin/.openclaw/workspace/crypto-agent-platform/data/btcusdt_15m.parquet")
+    import sys
     
+    # 測試框架
+    data_path = "/Users/changrunlin/.openclaw/workspace/crypto-agent-platform/data/btcusdt_15m.parquet"
+    
+    print(f"載入數據：{data_path}")
+    df = pd.read_parquet(data_path)
+    print(f"數據筆數：{len(df)}")
+    
+    # 測試信號函數
     def test_signal(data):
-        # 簡單測試：RSI 低於 30 買，高於 70 賣
-        import pandas as pd
-        
         closes = data['close'].values
+        
+        # RSI 計算
         deltas = np.diff(closes)
         gains = np.where(deltas > 0, deltas, 0)
         losses = np.where(deltas < 0, -deltas, 0)
@@ -268,6 +283,7 @@ if __name__ == "__main__":
             rs = gain_avg / (loss_avg + 1e-10)
             rsi[i] = 100 - (100 / (1 + rs))
         
+        # RSI 信號
         signals = []
         for i in range(len(data)):
             if rsi[i] < 30:
@@ -280,16 +296,16 @@ if __name__ == "__main__":
         return signals
     
     params = {
-        'entry_condition': 'always',
         'stop_loss_pct': 0.02,
         'take_profit_pct': 0.04,
         'max_holding_bars': 20
     }
     
+    print("\n運行回測...")
     engine = BacktestEngine(df, params)
     result = engine.run(test_signal)
     
-    print("測試結果：")
+    print("\n結果：")
     print(f"  WR: {result['wr']:.2f}%")
     print(f"  PF: {result['pf']:.2f}")
     print(f"  DD: {result['dd']:.2f}%")
