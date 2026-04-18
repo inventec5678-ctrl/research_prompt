@@ -8,108 +8,122 @@
 - DD ≤ 25%
 - Sharpe ≥ 1.5
 - 月交易 ≥ 100
+- TP + SL > 30%
+- Long PF > 1.0 AND Short PF > 1.0
+
+---
+
+## 📁 檔案結構
+
+```
+research_prompt/
+├── README.md                    # 本檔案（版本變更日誌）
+├── 研究者指南.md               # 研究者 prompt (v4.0)
+├── backtest_core.py            # 回測引擎
+├── monte_carlo_test.py         # Monte Carlo 穩定性測試
+├── CHANGELOG.md                # 迭代詳細日誌
+│
+└── strategies/                  # 策略資料夾
+    ├── 1h_rsi_narrow/           # 策略 1：窄 TP/SL 版
+    │   ├── strategy.py          # 程式碼
+    │   └── README.md
+    │
+    └── 1h_rsi_momentum_top3/   # 策略 2-4：Top 3 策略
+        ├── strategy.py          # 共用程式碼
+        ├── README.md            # Overview
+        ├── second_place/       # 🥈 最推薦
+        ├── first_place/        # 🥇 Sharpe 最高
+        └── third_place/        # 🥉 均衡之選
+```
 
 ---
 
 ## 版本變更日誌 (Changelog)
 
-### v2.0 — 2026-04-18 14:44
-**強制雙向獲利 + Exit 有效性**
+### v5.2 — 2026-04-18 19:04
+**整理 GitHub 資料夾結構**
 
-#### Prompt 變更
-```
-# 開頭新增
-你是個量化交易員負責找出BTC 15分K線的最佳alpha。
-你的目標是找到一個能在雙向市場（多頭和空頭）都獲利的策略，
-而不是碰巧在牛市賺錢。
-```
-
-#### Prompt 新增要求
-| 條款 | 內容 |
-|------|------|
-| 雙向獲利 | Long PF > 1.0 AND Short PF > 1.0（兩邊都要賺錢） |
-| Exit 有效性 | TP + SL > 30%（不能只是 Timeout 等收盤） |
-| max_holding_bars | 只是一個保險，不應是主要出场方式 |
-| 雙向 PF 分析 | 每次測試後要分析 Long PF 和 Short PF |
-
-#### 新增驗證步驟
-- 步驟 5：驗證 Exit 條件（檢查 TP + SL 是否 > 30%）
-- 步驟 6：驗證雙向獲利（檢查 Short PF 是否 > 1.0）
-
-#### 原因
-之前的策略 98.4% 靠 Timeout 出場，TP/SL 幾乎是裝飾品。Sharpe 66 但只是 BTC 牛市 beta，不是真正的 alpha。
+- 移除多餘檔案
+- strategies 資料夾每個策略一個子資料夾
 
 ---
 
-### v1.1 — 2026-04-18 14:17
-**強制每次測試後儲存**
+### v5.1 — 2026-04-18
+**Reorganize strategies folder**
 
-#### Prompt 變更
-```
-# 新增嚴格規定
-禁止跳過儲存！即使覺得結果不好也要儲存，方便未來檢視。
-
-# 儲存格式改為
-迭代_N_test_M.md
-（區分：同一迭代的不同測試）
-```
-
-#### 原因
-研究者有時不會儲存測試結果，導致歷史紀錄不完整。
+- 每個策略一個資料夾
+- 包含 strategy.py 程式碼
 
 ---
 
-### v1.0 — 2026-04-18 14:04
-**初始版本**
+### v5.0 — 2026-04-18
+**新增 Top 3 策略 + Overfitting 分析**
 
-#### 包含
-- 研究者指南.md：完整流程、步驟、代碼模板
-- backtest_core.py：回測引擎
-
-#### 流程
-1. 查看歷史（failures.md）
-2. 設計進場邏輯
-3. 實現 generate_signals()
-4. 測試並分析結果
-5. 儲存並記錄
-6. 調整後繼續
-
-#### 主要功能
-- 研究者只需實現 generate_signals() 函數
-- 回測引擎處理止損/止盈/成本
-- 每次迭代後儲存策略代碼和描述
-- 歷史追蹤（failures.md）
-- 分析引導（讓 agent 自己判斷問題）
+- researcher_v11 完成 100 輪測試
+- Top 3 策略出爐
+- Overfitting 風險評估通過
 
 ---
 
-## 數據
-
-- 檔案：`btcusdt_15m.parquet`
-- 欄位：`open`, `high`, `low`, `close`, `volume`
-
-## 回測引擎
-
-- 位置：`backtest_core.py`
-- 成本：0.03% 單邊（進場 + 出場 = 0.06%）
-- 進場：信號在 bar t → `closes[t+1]` 進場
-- 止損/止盈：相對於進場價計算
+### v4.0 — 2026-04-18
+**強制持續搜索直到完成 100 輪**
 
 ---
 
-## 檔案結構
+## 🚀 快速開始
 
+### 1. 運行回測
+
+```python
+import sys
+sys.path.insert(0, '/path/to/autoresearch')
+
+import pandas as pd
+from backtest_core import BacktestEngine
+from strategies.1h_rsi_momentum_top3.strategy import generate_signals
+
+df = pd.read_parquet("btcusdt_15m.parquet")
+
+params = {
+    'stop_loss_pct': 0.005,      # 0.5%
+    'take_profit_pct': 0.0065,   # 0.65%
+    'max_holding_bars': 7
+}
+
+engine = BacktestEngine(df, params)
+result = engine.run(generate_signals)
+
+print(f"WR: {result['wr']:.2f}%")
+print(f"PF: {result['pf']:.2f}")
+print(f"Sharpe: {result['sharpe']:.2f}")
 ```
-research_prompt/
-├── README.md          # 本檔案（版本變更日誌）
-├── 研究者指南.md      # 研究者 prompt
-├── backtest_core.py  # 回測引擎
-└── CHANGELOG.md      # 迭代詳細日誌（策略結果）
+
+### 2. Monte Carlo 穩定性測試
+
+```python
+from monte_carlo_test import MonteCarloTester
+
+tester = MonteCarloTester(df, generate_signals, params)
+mc = tester.run(n_bootstrap=500, block_size=10)
+
+print(f"Sharpe: {mc['sharpe_mean']:.2f} ± {mc['sharpe_std']:.2f}")
+print(f"通過: {mc['passed']}")
 ```
 
 ---
 
-## 門檻（Current）
+## 🏆 策略總覽
+
+| 策略 | 資料夾 | Sharpe | WR | PF | 推薦 |
+|------|--------|--------|-----|-----|------|
+| 1h_rsi_narrow | 1h_rsi_narrow/ | 55.49 | 65.67% | 2.19 | 基礎版 |
+| Top 3 第二名 | 1h_rsi_momentum_top3/second_place/ | 72.83 | 67.85% | 3.05 | **最推薦** |
+| Top 3 第一名 | 1h_rsi_momentum_top3/first_place/ | 76.02 | 71.60% | 3.04 | Sharpe 最高 |
+| Top 3 第三名 | 1h_rsi_momentum_top3/third_place/ | 72.35 | 66.76% | 2.95 | 均衡之選 |
+
+---
+
+## 門檻
 
 | 指標 | 門檻 |
 |------|------|
@@ -123,90 +137,11 @@ research_prompt/
 
 ---
 
-## 框架優化教訓 (Framework Lessons)
+## 框架教訓 (Framework Lessons)
 
-這些是從研究過程中得到的系統層面教訓，幫助我們不斷優化框架。
-
-### Lesson 1：Timeout 不是有效的 Exit
-**發現**：策略靠 Timeout（98.4%）平倉，TP/SL 幾乎是裝飾品。
-
-**框架改動**：v2.0 新增 Exit 有效性要求（TP + SL > 30%）
-
-**結論**：必須強制要求 TP/SL 觸發，不能只是等時間到。
-
----
-
-### Lesson 2：牛市 beta ≠ 策略 alpha
-**發現**：Sharpe 高達 66，36/36 配置全通過——利潤來自 BTC 牛市，不是策略。
-
-**框架改動**：v2.0 新增雙向獲利要求（Long PF > 1.0 AND Short PF > 1.0）
-
-**結論**：必須要求空頭市場也能獲利，否則只是運氣。
-
----
-
-### Lesson 3：高 Sharpe 可能只是運氣
-**發現**：一組參數看起來很好，但只是因為剛好適合特定市場環境。
-
-**框架改動**：要求多個配置通過、要求雙向驗證
-
-**結論**：不能只看單一結果，要看穩定性和普適性。
-
----
-
-### Lesson 4：每次測試都要儲存
-**發現**：研究者有時跳過儲存，導致歷史紀錄不完整。
-
-**框架改動**：v1.1 強制規定每次測試後都必須儲存
-
-**結論**：禁止跳過儲存，歷史紀錄是未來決策的基礎。
-
-### v3.1 — 2026-04-18 16:01
-**新增 Monte Carlo 穩定性測試**
-
-#### 新增檔案
-- `monte_carlo_test.py`：Block Bootstrap 評估策略穩定性
-
-#### Prompt 變更
-```
-# 步驟 5：運行 Monte Carlo 穩定性測試
-from monte_carlo_test import MonteCarloTester
-
-tester = MonteCarloTester(df, generate_signals, params)
-mc_result = tester.run(n_bootstrap=500, block_size=10)
-```
-
-#### Monte Carlo 通過標準
-| 指標 | 標準 |
-|------|------|
-| Sharpe 5th percentile | > 0 |
-| Sharpe 變異係數 | < 2 |
-| 95% VaR DD | < 50% |
-
-#### 原因
-只靠基本回測通過不夠，必須確認策略在不同市場環境下都穩定。
-
-### v4.0 — 2026-04-18 16:16
-**強制持續搜索直到完成 100 輪**
-
-#### Prompt 變更
-```
-## ⚠️ 任務模式：持續搜索直到完成 100 輪
-
-你必須持續搜索，直到完成 100 輪測試。
-
-禁止：
-- ❌ 一次跑多個配置
-- ❌ 批量測試所有組合
-- ❌ 寫腳本跑 grid search
-
-必須：
-- ✅ 一輪只測試一組策略 + 一組參數
-- ✅ 每輪測試後馬上儲存
-- ✅ 通過基本門檻後運行 Monte Carlo
-- ✅ 持續搜索不放棄
-- ✅ 完成 100 輪後報告最好的 3 個策略
-```
-
-#### 原因
-研究者在 100 輪指令下選擇了批量跑配置而非逐個測試，導致流程不符預期。
+| Lesson | 發現 | 框架改動 |
+|--------|------|----------|
+| Timeout 不是有效 Exit | 98.4% Timeout 出場 | v2.0 新增 Exit 有效性要求 |
+| 牛市 beta ≠ alpha | Sharpe 66 只是牛市 | v2.0 新增雙向獲利要求 |
+| 高 Sharpe 可能只是運氣 | 單一結果可能是運氣 | 要求多配置驗證 |
+| 每次測試都要儲存 | 研究者跳過儲存 | v1.1 強制規定儲存 |
